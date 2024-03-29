@@ -1,38 +1,36 @@
 import asyncio
 import websockets
+import threading
 
-# Função para lidar com mensagens recebidas do servidor
 async def handle_messages(websocket):
-    # Esta função é executada em um loop infinito, aguardando mensagens do servidor
-    async for message in websocket:
-        # Imprime a mensagem recebida do servidor
-        print(message)
-
-# Função para enviar mensagens para o servidor
-async def send_messages(websocket):
-    # Este loop é executado indefinidamente até que o usuário digite 'exit' para sair
     while True:
-        # Solicita ao usuário que digite uma mensagem para enviar ao servidor
-        message = input("Digite a mensagem para enviar (ou 'exit' para sair): ")
-        # Se o usuário digitar 'exit', quebra o loop e sai da função
-        if message == 'exit':
-            await websocket.close()  # Fecha a conexão com o servidor WebSocket
-            print("Conexão encerrada.")
-            break  # Sai do loop
-        # Envia a mensagem para o servidor
-        await websocket.send(message)
+        try:
+            message = await websocket.recv()  # Receive message from server
+            print(f"Received message: {message}")  # Print received message
+        except websockets.exceptions.ConnectionClosed:
+            print("Connection to server closed")
+            break
 
-# Função para conectar ao servidor WebSocket
+def send_messages_sync(websocket):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(send_messages(websocket))
+
+async def send_messages(websocket):
+    while True:
+        recipient_ip = input("Insira o IP do destinatário: ")
+        message = input(f"Digite a mensagem para enviar para IP:{recipient_ip} (ou 'exit' para sair): ")
+        if message == 'exit':
+            await websocket.close()
+            print("Conexão encerrada.")
+            break
+        await websocket.send(f"{recipient_ip} {message}")
+
 async def connect_to_server():
-    # URI do servidor WebSocket ao qual vamos nos conectar
-    uri = "ws://localhost:8765"  # Endereço do servidor WebSocket
-    # Conecta-se ao servidor WebSocket
-    async with websockets.connect(uri) as websocket:
-        # Imprime uma mensagem indicando que o cliente está conectado ao servidor
+    async with websockets.connect('ws://localhost:8765') as websocket:
         print("Conectado ao servidor.")
-        
-        # Inicia duas tarefas assíncronas para lidar com mensagens recebidas e enviadas
-        await asyncio.gather(handle_messages(websocket), send_messages(websocket))
+        threading.Thread(target=send_messages_sync, args=(websocket,)).start()
+        await handle_messages(websocket)
 
 # Inicia o cliente WebSocket
 asyncio.run(connect_to_server())
